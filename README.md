@@ -46,8 +46,8 @@ with a Material 3 interface, a PC simulator and a one-click Linux flasher.**
 |:-:|:-:|:-:|
 | <img src="docs/screenshots/ohm.png" width="260"> | <img src="docs/screenshots/amp.png" width="260"> | <img src="docs/screenshots/ncv.png" width="260"> |
 | Resistance | AC current, over range | Non-contact voltage |
-| <img src="docs/screenshots/reset.png" width="260"> | <img src="docs/screenshots/about.png" width="260"> | <img src="docs/screenshots/ru.png" width="260"> |
-| Confirmation dialog | About | Russian UI, REL |
+| <img src="docs/screenshots/reset.png" width="260"> | <img src="docs/screenshots/about.png" width="260"> | <img src="docs/screenshots/rel.png" width="260"> |
+| Confirmation dialog | About | Relative mode (REL) |
 | <img src="docs/screenshots/game-snake.png" width="260"> | <img src="docs/screenshots/game-runner.png" width="260"> | <img src="docs/screenshots/game-fifteen.png" width="260"> |
 | Snake | Runner | 15 Puzzle |
 
@@ -160,7 +160,8 @@ cd sim && cargo run --release
 
 Arrows and Enter act as the buttons, Shift + arrow is a long press, Backspace is a long OK.
 `+` / `-` change the simulated battery, `C` toggles charging, `Q` quits.
-Headless screenshots: `cargo run --release -- --shot out.ppm en,right,uplong`.
+Headless screenshots: `cargo run --release -- --shot out.ppm en,right,uplong`;
+`tools/screenshots.sh` renders all README screenshots in both languages.
 
 ### Tests
 
@@ -241,6 +242,7 @@ device/               firmware: startup, bare-register drivers (clock, LCD, keys
 sim/                  SDL2 simulator with a fake measurement chip
 tools/gen_font.py     font and icon rasterizer (generates ui/src/font_data.rs)
 tools/bootdisk.py     FAT12 writer for the bootloader disk (Linux)
+tools/screenshots.sh  renders every README screenshot in both languages
 build.sh              builds DMT99-custom.BIN
 flash-dmt99.sh        flasher for Linux (--install-launcher adds a desktop icon)
 docs/screenshots/     images for this README (ru/: Russian UI for README.ru.md)

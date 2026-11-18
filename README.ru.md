@@ -163,7 +163,8 @@ cd sim && cargo run --release
 
 Стрелки и Enter работают как кнопки, Shift + стрелка — долгое нажатие, Backspace — долгий OK.
 `+` / `-` меняют заряд батареи, `C` включает зарядку, `Q` — выход.
-Скриншоты без окна: `cargo run --release -- --shot out.ppm en,right,uplong`.
+Скриншоты без окна: `cargo run --release -- --shot out.ppm en,right,uplong`;
+`tools/screenshots.sh` рисует все скриншоты для README на обоих языках.
 
 ### Тесты
 
@@ -245,6 +246,7 @@ device/               прошивка: старт, драйверы на рег
 sim/                  симулятор на SDL2 с имитатором измерительной микросхемы
 tools/gen_font.py     растеризатор шрифтов и иконок (генерирует ui/src/font_data.rs)
 tools/bootdisk.py     запись FAT12 на диск загрузчика (Linux)
+tools/screenshots.sh  рисует все скриншоты для README на обоих языках
 build.sh              собирает DMT99-custom.BIN
 flash-dmt99.sh        прошивальщик для Linux (--install-launcher добавляет иконку)
 docs/screenshots/     картинки для README (ru/ — русский интерфейс)
