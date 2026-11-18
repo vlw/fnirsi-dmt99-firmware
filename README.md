@@ -2,6 +2,8 @@
 
 # DMT-99 Custom Firmware
 
+[![Читать на русском](https://img.shields.io/badge/%D0%A7%D0%B8%D1%82%D0%B0%D1%82%D1%8C-%D0%BD%D0%B0%20%D1%80%D1%83%D1%81%D1%81%D0%BA%D0%BE%D0%BC-d52b1e?style=for-the-badge)](README.ru.md)
+
 **A from-scratch firmware for the FNIRSI DMT-99 multimeter, written in Rust,
 with a Material 3 interface, a PC simulator and a one-click Linux flasher.**
 
@@ -241,7 +243,7 @@ tools/gen_font.py     font and icon rasterizer (generates ui/src/font_data.rs)
 tools/bootdisk.py     FAT12 writer for the bootloader disk (Linux)
 build.sh              builds DMT99-custom.BIN
 flash-dmt99.sh        flasher for Linux (--install-launcher adds a desktop icon)
-docs/screenshots/     images for this README
+docs/screenshots/     images for this README (ru/: Russian UI for README.ru.md)
 ```
 
 ## Limitations
