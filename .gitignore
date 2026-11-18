@@ -1,0 +1,30 @@
+# Rust build output
+target/
+
+# Firmware images: built from source (./build.sh) or derived from FNIRSI's stock firmware,
+# which is not ours to redistribute
+*.BIN
+*.bin
+!docs/**/*.bin
+
+# Bootloader-disk dumps and flasher backups
+*.img
+backups/
+
+# Local working files that are not part of this firmware (stock-firmware experiments, dumps)
+local/
+
+# Third-party reference checkout (github.com/smhgzll/dmt-99-multimeter-custom-firmware)
+ref/
+
+# Downloaded icon font (15 MB); see README to fetch it again
+tools/fonts/*.ttf
+
+# Python / editors / OS
+__pycache__/
+*.pyc
+*.ppm
+.vscode/
+.idea/
+*.swp
+.DS_Store

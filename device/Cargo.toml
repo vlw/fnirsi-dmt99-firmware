@@ -1,0 +1,18 @@
+[package]
+name = "device"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ui = { path = "../ui" }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+debug = true
+
+[profile.dev]
+panic = "abort"
+opt-level = "s"

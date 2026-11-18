@@ -1,0 +1,10 @@
+[package]
+name = "sim"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ui = { path = "../ui" }
+
+[profile.dev]
+opt-level = 1
