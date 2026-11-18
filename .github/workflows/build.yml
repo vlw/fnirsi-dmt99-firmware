@@ -1,0 +1,57 @@
+# Tests and builds the firmware on every push and pull request.
+# Pushing a tag like v1.1.0 also publishes a GitHub release with the firmware image.
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write # needed to create releases
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          rustup target add riscv32imac-unknown-none-elf
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq llvm libsdl2-dev
+
+      - name: Test
+        run: cd ui && cargo test
+
+      - name: Build simulator
+        run: cd sim && cargo build --release
+
+      - name: Build firmware
+        run: ./build.sh
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: DMT99-custom
+          path: DMT99-custom.BIN
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' ui/Cargo.toml | head -1)
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match the version in ui/Cargo.toml ($version)" >&2
+            exit 1
+          fi
+          bin="DMT99-custom-v$version.BIN"
+          cp DMT99-custom.BIN "$bin"
+          sha256sum "$bin" > "$bin.sha256"
+          gh release create "$GITHUB_REF_NAME" "$bin" "$bin.sha256" \
+            --title "DMT-99 custom firmware $version" \
+            --notes "Flash with \`./flash-dmt99.sh $bin\` on Linux, or copy the file to the meter's BOOT disk on Windows and press AUTO. See the README for details." \
+            --generate-notes

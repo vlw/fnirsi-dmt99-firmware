@@ -23,7 +23,8 @@ pub const GREEN: u16 = rgb(0x5B, 0xD1, 0x7A);
 pub const RED: u16 = rgb(0xFF, 0x6E, 0x62);
 const BATT_EMPTY: u16 = rgb(0x78, 0x78, 0x80);
 
-pub const VERSION: &str = "1.0";
+/// Firmware version, taken from ui/Cargo.toml (the release workflow checks the git tag against it).
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const AUTHOR: &str = "Vladimir Bely";
 pub const REPO: &str = "github.com/vlw";
 
