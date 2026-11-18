@@ -158,6 +158,7 @@ fn main() {
         let path = args.get(2).expect("--shot PATH [keys]");
         let keys = args.get(3).map(|s| s.split(',').filter(|s| !s.is_empty()).collect()).unwrap_or(Vec::<&str>::new());
         let mut now: u32 = 1000; // game clock in 10 ms ticks
+        let mut muted = false;
         for (t, k) in keys.into_iter().enumerate() {
             if let Some(n) = k.strip_prefix("wait") {
                 // "wait150": let 1.5 s of game time pass
@@ -171,6 +172,7 @@ fn main() {
                 "charge" => inp.charging = true,
                 "low" => inp.battery_mv = 3480,
                 "en" => app.s.english = true,
+                "mute" => muted = true, // the fake chip stops answering: shows the waiting state
                 k => {
                     let key = match k {
                         "up" => Key::Up,
@@ -188,15 +190,21 @@ fn main() {
                     app.key(key);
                 }
             }
+            if muted {
+                app.take_command();
+                continue;
+            }
             if let Some(c) = app.take_command() {
                 chip.command(c, &mut app);
             }
             chip.tick(t as u32 * 100, &mut app);
         }
-        if let Some(c) = app.take_command() {
-            chip.command(c, &mut app);
+        if !muted {
+            if let Some(c) = app.take_command() {
+                chip.command(c, &mut app);
+            }
+            chip.tick(500, &mut app);
         }
-        chip.tick(500, &mut app);
         let frames: u32 = std::env::var("ANIM_FRAMES").ok().and_then(|v| v.parse().ok()).unwrap_or(99);
         for _ in 0..frames {
             app.step_anim();

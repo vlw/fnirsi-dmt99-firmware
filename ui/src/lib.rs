@@ -8,7 +8,7 @@ pub mod meter;
 pub mod font;
 pub mod font_data;
 
-pub use font_data::{BATT, BODY, BRAND, HUGE, ICON, ICON_FILL, SMALL, TITLE};
+pub use font_data::{BATT, BODY, BRAND, HUGE, ICON, ICON_FILL, LARGE, SMALL, TITLE};
 
 pub const W: i32 = 320;
 pub const H: i32 = 240;
@@ -138,14 +138,23 @@ impl Canvas<'_> {
         f.width(s)
     }
 
+    /// Text with its baseline at `y`, its ink centred horizontally on `cx`.
     pub fn text_centered(&mut self, f: &font::Font, cx: i32, y: i32, s: &str, c: u16) {
-        let w = f.width(s);
-        self.text(f, cx - w / 2, y, s, c);
+        let (l, r) = f.ink(s).map_or((0, f.width(s)), |(l, r, _, _)| (l, r));
+        self.text(f, cx - (l + r) / 2, y, s, c);
     }
 
+    /// Text with its baseline at `y`, its ink ending exactly at `rx`.
     pub fn text_right(&mut self, f: &font::Font, rx: i32, y: i32, s: &str, c: u16) {
-        let w = f.width(s);
-        self.text(f, rx - w, y, s, c);
+        let r = f.ink(s).map_or(f.width(s), |(_, r, _, _)| r);
+        self.text(f, rx - r, y, s, c);
+    }
+
+    /// Text (or an icon) whose ink is centred on (cx, cy) both ways.
+    pub fn text_mid(&mut self, f: &font::Font, cx: i32, cy: i32, s: &str, c: u16) {
+        if let Some((l, r, t, b)) = f.ink(s) {
+            self.text(f, cx - (l + r) / 2, cy - (t + b) / 2, s, c);
+        }
     }
 }
 

@@ -248,6 +248,22 @@ impl Reading {
         Some((if self.negative { -m } else { m }, div))
     }
 
+    /// The chip's current range: how full it is (0..=10000) and its full scale in the shown unit.
+    /// The display holds at most 4 digits, so the decimal point fixes the range: "9.997 V" is the
+    /// 10 V range, "99.97 V" the 100 V one, and the fill is simply the 4-digit count / 10000.
+    /// None where a range makes no sense (temperature, text screens).
+    pub fn range(&self) -> Option<(u32, u32)> {
+        if self.unit_str().is_empty() || self.unit == 21 {
+            return None;
+        }
+        let full = 10u32.pow(if self.decimal_after == 0 { 4 } else { self.decimal_after as u32 });
+        match self.number() {
+            Some((m, _)) => Some((m.unsigned_abs().min(10_000), full)),
+            None if self.is_overload() => Some((10_000, full)),
+            None => None,
+        }
+    }
+
     pub fn is_overload(&self) -> bool {
         self.symbols.contains(&14) && self.number().is_none()
     }
@@ -349,6 +365,7 @@ mod tests {
         assert_eq!(r.unit_str(), "kΩ");
         assert_eq!(text(&r), " 9.97"); // RESISTANCE_VALIDATION.md: 10 kΩ resistor reads " 9.97" kΩ
         assert_eq!(r.number(), Some((997, 100)));
+        assert_eq!(r.range(), Some((997, 100))); // 9.97 kΩ on the 100 kΩ range: about 10 % full
     }
 
     #[test]

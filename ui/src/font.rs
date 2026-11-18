@@ -84,6 +84,19 @@ impl Font {
         (if i % 2 == 0 { v >> 4 } else { v & 15 }) as u32
     }
 
+    /// Ink box of `s` drawn at the origin with its baseline at 0: (left, right, top, bottom).
+    /// Centring on ink rather than advance widths keeps text optically centred: glyphs have
+    /// uneven side bearings, so e.g. "100" is not symmetric inside its advance box.
+    pub fn ink(&self, s: &str) -> Option<(i32, i32, i32, i32)> {
+        self.layout(s).filter(|(b, _)| b.w > 0 && b.h > 0).fold(None, |acc, (b, pen)| {
+            let (l, r, t, bo) = (pen + b.x as i32, pen + b.x as i32 + b.w as i32, b.y as i32, b.y as i32 + b.h as i32);
+            Some(match acc {
+                None => (l, r, t, bo),
+                Some((l0, r0, t0, b0)) => (l0.min(l), r0.max(r), t0.min(t), b0.max(bo)),
+            })
+        })
+    }
+
     /// Advance width of `s` in whole px.
     pub fn width(&self, s: &str) -> i32 {
         let mut l = self.layout(s);

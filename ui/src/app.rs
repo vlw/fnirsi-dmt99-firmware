@@ -4,7 +4,7 @@
 use crate::font_data::*;
 use crate::games::{self, Game};
 use crate::meter::{group_of, Frame, Mode, Reading, GROUP_DOWN, MODES};
-use crate::{rgb, Canvas, Txt, BATT, BODY, HUGE, SMALL, TITLE, W};
+use crate::{rgb, Canvas, Txt, BATT, BODY, HUGE, LARGE, SMALL, TITLE, W};
 use core::fmt::Write;
 
 // Material 3 dark scheme, blue seed. Greys keep R/B on multiples of 8 and G of 4 so RGB565 stays neutral.
@@ -624,7 +624,7 @@ impl App {
             Screen::Level => games::name(self.game_sel as usize, en),
             _ => self.mode().name(en),
         };
-        c.text(&BODY, 16, 23, title, ON_SURFACE);
+        c.text(&BODY, STATUS_MARGIN, status_baseline(), title, ON_SURFACE);
         self.status_icons(c, inp);
         match self.screen {
             Screen::Measure => self.measure(c),
@@ -642,16 +642,17 @@ impl App {
         }
     }
 
+    /// Right side of the status bar: battery at the edge, then status icons, all on one centre line.
     fn status_icons(&self, c: &mut Canvas, inp: &Inputs) {
-        let mut x = battery_icon(c, W - 12, 8, inp) - 6;
-        if self.s.quiet_switch {
-            x -= ICON_FILL.width(IC_NOTIFICATIONS_OFF);
-            c.text(&ICON_FILL, x, 24, IC_NOTIFICATIONS_OFF, ON_SURFACE);
-            x -= 4;
-        }
-        if self.hold && self.screen == Screen::Measure {
-            x -= ICON_FILL.width(IC_PAUSE);
-            c.text(&ICON_FILL, x, 24, IC_PAUSE, ON_SURFACE);
+        let mut x = battery_icon(c, W - STATUS_MARGIN, STATUS_CY, inp) - STATUS_GAP;
+        let icons = [
+            (self.s.quiet_switch, IC_NOTIFICATIONS_OFF),
+            (self.hold && self.screen == Screen::Measure, IC_PAUSE),
+        ];
+        for (shown, icon) in icons {
+            if shown {
+                x = status_icon(c, x, icon) - STATUS_GAP;
+            }
         }
     }
 
@@ -678,9 +679,7 @@ impl App {
             chip(c, "REL", TERTIARY_CONT, ON_TERTIARY_CONT);
         }
         match (mode, self.reading) {
-            (_, None) => {
-                c.text_centered(&HUGE, W / 2, 170, "----", SURFACE_HI);
-            }
+            (_, None) => {} // waiting for the chip to confirm the mode: the card stays empty
             (Mode::Ncv, Some(r)) => {
                 let level = r.symbols.iter().filter(|&&s| s == 16).count() as i32;
                 for i in 0..4 {
@@ -694,7 +693,7 @@ impl App {
                 let active = r.symbols[0] != 14;
                 let en = self.s.english;
                 let (t, col) = if active { (tr(en, "Фаза!", "Live!"), RED) } else { (tr(en, "Нет фазы", "No live wire"), ON_SURFACE_VAR) };
-                c.text(&TITLE, 28, 150, t, col);
+                big_word(c, t, CARD_CY, col);
             }
             (_, Some(r)) => self.value(c, &r),
         }
@@ -751,9 +750,11 @@ impl App {
                 let mut b = [0u8; 8];
                 let n = r.text(&mut b);
                 let s = core::str::from_utf8(&b[..n]).unwrap_or("").trim();
-                c.text(&TITLE, 28, 130, s, ON_SURFACE);
                 if s == "AUTO" {
-                    c.text(&BODY, 28, 162, tr(self.s.english, "Подключите щупы", "Connect the probes"), ON_SURFACE_VAR);
+                    big_word(c, s, CARD_CY - 12, ON_SURFACE);
+                    c.text_centered(&BODY, W / 2, CARD_CY + 36, tr(self.s.english, "Подключите щупы", "Connect the probes"), ON_SURFACE_VAR);
+                } else {
+                    big_word(c, s, CARD_CY, ON_SURFACE);
                 }
                 return;
             }
@@ -763,10 +764,16 @@ impl App {
         let mw = HUGE.width("-");
         let x = (W - mw - HUGE.width(t.as_str())) / 2;
         if neg {
-            c.text(&HUGE, x, 170, "-", ON_SURFACE);
+            c.text(&HUGE, x, DIGITS_Y, "-", ON_SURFACE);
         }
-        c.text(&HUGE, x + mw, 170, t.as_str(), ON_SURFACE);
+        c.text(&HUGE, x + mw, DIGITS_Y, t.as_str(), ON_SURFACE);
         c.text_right(&TITLE, W - 32, 72, unit, PRIMARY);
+        if let Some((fill, full)) = r.range() {
+            // over range is a warning for voltage and current; for Ω and continuity "OL" just means open probes
+            // (continuity reports in volts too, so it is excluded by mode, not by unit)
+            let alarm = r.is_overload() && (6..=10).contains(&r.unit) && self.mode() != Mode::Diode;
+            range_bar(c, fill, full, r.unit_str(), r.is_overload(), alarm);
+        }
     }
 
     /// Menu row `i`: icon, label and the control on its right.
@@ -948,18 +955,74 @@ fn mode_label(c: &mut Canvas, m: Mode, cx: i32, cy: i32, col: u16, fahrenheit: b
     }
 }
 
-/// Android 16 style battery, right edge at `right`: filled pill with the bold percentage inside,
-/// a small cap, and a bolt beside it while charging. Returns the left edge.
-fn battery_icon(c: &mut Canvas, right: i32, y: i32, inp: &Inputs) -> i32 {
+/// Baseline of the big reading inside the measurement card.
+const DIGITS_Y: i32 = 158;
+/// Vertical centre of the measurement card's content area (below the chips row).
+const CARD_CY: i32 = 118;
+
+/// A status word centred in the card: large where the large font has its letters, else the title font.
+fn big_word(c: &mut Canvas, s: &str, cy: i32, col: u16) {
+    let f = if s.chars().all(|ch| ch == ' ' || LARGE.glyph(ch).is_some()) { &LARGE } else { &TITLE };
+    c.text_mid(f, W / 2, cy, s, col);
+}
+
+/// Range bar geometry: the labels sit in fixed cells, so the bar has the same length in every mode.
+const RANGE_Y: i32 = 168;
+const RANGE_LEFT_W: i32 = 16;
+const RANGE_RIGHT_W: i32 = 72;
+
+/// Material 3 linear indicator under the reading: how much of the chip's current range is used
+/// (`fill` of 10000), between "0" and the range's full scale.
+fn range_bar(c: &mut Canvas, fill: u32, full: u32, unit: &str, overload: bool, alarm: bool) {
+    let cy = RANGE_Y + 2;
+    let x0 = 28 + RANGE_LEFT_W + 8;
+    let x1 = W - 28 - RANGE_RIGHT_W - 8;
+    let w = x1 - x0;
+    c.text_right(&SMALL, x0 - 8, cy + SMALL.ink("0").map_or(5, |(_, _, t, b)| -(t + b) / 2), "0", ON_SURFACE_VAR);
+    c.round_rect(x0, RANGE_Y, w, 4, 2, SURFACE_HI);
+    let fw = (w as u32 * fill / 10_000) as i32;
+    let col = match (overload, alarm) {
+        (true, true) => RED,
+        (true, false) => ON_SURFACE_VAR,
+        _ => PRIMARY,
+    };
+    if fw > 0 {
+        c.round_rect(x0, RANGE_Y, fw.max(4), 4, 2, col);
+    }
+    let mut label = Txt::<16>::new();
+    let _ = write!(label, "{full} {unit}");
+    // digits share one baseline with the "0": centre on the digit height, not on letters like "k"
+    c.text(&SMALL, x1 + 8, cy + SMALL.ink("0").map_or(5, |(_, _, t, b)| -(t + b) / 2), label.as_str(), ON_SURFACE_VAR);
+}
+
+/// Status bar geometry: everything is centred on one line, with equal outer margins and gaps.
+const STATUS_CY: i32 = 16;
+const STATUS_MARGIN: i32 = 16;
+const STATUS_GAP: i32 = 6;
+
+/// Baseline that puts capital letters of the status title on the status centre line.
+fn status_baseline() -> i32 {
+    BODY.ink("Н").map_or(23, |(_, _, t, b)| STATUS_CY - (t + b) / 2)
+}
+
+/// A status icon whose ink ends at `right`; returns its left edge.
+fn status_icon(c: &mut Canvas, right: i32, icon: &str) -> i32 {
+    let w = ICON_FILL.ink(icon).map_or(0, |(l, r, _, _)| r - l);
+    c.text_mid(&ICON_FILL, right - w / 2, STATUS_CY, icon, ON_SURFACE);
+    right - w
+}
+
+/// Android 16 style battery, right edge at `right`, centred on `cy`: filled pill with the bold
+/// percentage inside, a small cap, and a bolt beside it while charging. Returns the left edge.
+fn battery_icon(c: &mut Canvas, right: i32, cy: i32, inp: &Inputs) -> i32 {
     let (bw, bh) = (30, 16);
+    let y = cy - bh / 2;
     let mut x = right;
     if inp.charging {
-        x -= ICON_FILL.width(IC_BOLT) - 2;
-        c.text(&ICON_FILL, x, y + 15, IC_BOLT, ON_SURFACE);
-        x -= 2;
+        x = status_icon(c, x, IC_BOLT) - 2;
     }
     x -= 3;
-    c.round_rect(x, y + 5, 3, bh - 10, 1, BATT_EMPTY);
+    c.round_rect(x, cy - 3, 3, 6, 1, BATT_EMPTY);
     x -= bw + 1;
     let p = battery_percent(inp.battery_mv) as i32;
     let fill = if inp.charging {
@@ -979,7 +1042,7 @@ fn battery_icon(c: &mut Canvas, right: i32, y: i32, inp: &Inputs) -> i32 {
     }
     let mut t = Txt::<4>::new();
     let _ = write!(t, "{}", p);
-    c.text_centered(&BATT, x + bw / 2, y + 12, t.as_str(), BG);
+    c.text_mid(&BATT, x + bw / 2, cy, t.as_str(), BG);
     x
 }
 
@@ -1110,6 +1173,57 @@ mod tests {
         a.key(Key::Back);
         a.key(Key::Back);
         assert!(a.in_menu());
+    }
+
+    #[test]
+    fn range_labels_fit_their_cell() {
+        let units = ["V", "mV", "µA", "mA", "A", "Ω", "kΩ", "MΩ", "nF", "µF", "mF", "Hz", "kHz", "MHz"];
+        for u in units {
+            for full in [10, 100, 1000, 10000] {
+                if u == "MHz" && full > 10 {
+                    continue; // the meter measures frequency up to 10 MHz
+                }
+                let t = std::format!("{full} {u}");
+                assert!(SMALL.width(&t) <= RANGE_RIGHT_W, "{t}: {}", SMALL.width(&t));
+            }
+        }
+        assert!(SMALL.width("0") <= RANGE_LEFT_W);
+    }
+
+    /// Draw `s` with `text_mid` at the centre of a small canvas and return its ink box centre.
+    fn mid_of(f: &crate::font::Font, s: &str) -> (f32, f32) {
+        let mut buf = [0u16; W as usize * 40];
+        let mut c = Canvas { buf: &mut buf, y0: 0, rows: 40, clip: (0, W) };
+        c.text_mid(f, 100, 20, s, 0xFFFF);
+        let (mut l, mut r, mut t, mut b) = (W, 0, 40, 0);
+        for y in 0..40 {
+            for x in 0..W {
+                if c.buf[(y * W + x) as usize] != 0 {
+                    (l, r, t, b) = (l.min(x), r.max(x + 1), t.min(y), b.max(y + 1));
+                }
+            }
+        }
+        ((l + r) as f32 / 2.0, (t + b) as f32 / 2.0)
+    }
+
+    #[test]
+    fn icons_and_battery_digits_are_centred() {
+        for s in ["100", "52", "7"] {
+            let (x, y) = mid_of(&BATT, s);
+            assert!((x - 100.0).abs() <= 0.5 && (y - 20.0).abs() <= 0.5, "{s}: centred at ({x}, {y})");
+        }
+        for icon in [IC_NOTIFICATIONS_OFF, IC_PAUSE, IC_BOLT] {
+            let (x, y) = mid_of(&ICON_FILL, icon);
+            assert!((x - 100.0).abs() <= 0.5 && (y - 20.0).abs() <= 0.5, "icon centred at ({x}, {y})");
+        }
+    }
+
+    #[test]
+    fn big_words_use_the_large_font() {
+        for s in ["Фаза!", "Нет фазы", "Live!", "No live wire", "AUTO"] {
+            assert!(s.chars().all(|ch| ch == ' ' || LARGE.glyph(ch).is_some()), "{s}");
+            assert!(LARGE.width(s) <= W - 48, "{s} is wider than the card");
+        }
     }
 
     #[test]

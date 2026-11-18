@@ -7,7 +7,7 @@ with a Material 3 interface, a PC simulator and a one-click Linux flasher.**
 
 ![Rust](https://img.shields.io/badge/Rust-no__std-orange?logo=rust)
 ![RISC-V](https://img.shields.io/badge/RISC--V-CH32V303-blue)
-![Version](https://img.shields.io/badge/version-1.1.0-green)
+![Version](https://img.shields.io/badge/version-1.2.0-green)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 <img src="docs/screenshots/dcv.png" width="320" alt="DC voltage">&nbsp;<img src="docs/screenshots/menu.png" width="320" alt="Settings">
@@ -185,7 +185,7 @@ The [build workflow](.github/workflows/build.yml) tests and builds every push. T
 version, bump `version` in `ui/Cargo.toml` (the firmware shows it in *About*), commit, then:
 
 ```bash
-git tag v1.1.0 && git push origin v1.1.0
+git tag v1.2.0 && git push origin v1.2.0
 ```
 
 The workflow checks that the tag matches the version and attaches the firmware image and its

@@ -17,6 +17,8 @@ WIDE_GLYPHS = {"Ω"}
 
 TEXT = "".join(map(chr, range(32, 127))) + "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя°Ωµ–—…⚡◀▶▲▼~›·"
 BIG = " 0123456789.-OL"
+# big status words: live wire ("Фаза!" / "Нет фазы") and the chip's AUTO screen
+LARGE_TEXT = "".join(sorted(set("Фаза!Нет фазыLive!No live wireAUTO")))
 
 # Material Symbols code points used by the UI (names from fonts.google.com/icons)
 ICONS = {
@@ -46,6 +48,7 @@ FONTS = [  # name, file, px, charset, variation axes (Fill, Grade, opsz, wght), 
     ("SMALL", ROBOTO.format("Regular"), 14, TEXT, None, 2),
     ("BODY", ROBOTO.format("Medium"), 18, TEXT, None, 2),
     ("TITLE", ROBOTO.format("Medium"), 24, TEXT, None, 1),  # large: whole-px placement is not visible
+    ("LARGE", ROBOTO.format("Medium"), 40, LARGE_TEXT, None, 1),  # only the letters of the big status words
     ("HUGE", ROBOTO.format("Light"), 88, BIG, None, 1),
     ("BATT", ROBOTO.format("Bold"), 12, " 0123456789", None, 1),
     ("ICON_FILL", SYMBOLS, 18, ICON_CHARS, [1, 0, 20, 500], 1),
