@@ -188,8 +188,19 @@ version, bump `version` in `ui/Cargo.toml` (the firmware shows it in *About*), c
 git tag v1.2.0 && git push origin v1.2.0
 ```
 
-The workflow checks that the tag matches the version and attaches the firmware image and its
-SHA-256 to a new release.
+The workflow checks that the tag matches the version, signs a build provenance attestation
+(Sigstore) and attaches the firmware image and its SHA-256 to a new release.
+
+**Verifying a release.** The attestation proves the file was built by this repository's
+workflow from the tagged commit:
+
+```bash
+gh attestation verify DMT99-custom-v1.2.0.BIN -R vlw/fnirsi-dmt99-firmware
+```
+
+The build is also reproducible (the Rust version is pinned), so you can check it without
+trusting GitHub at all: `git checkout v1.2.0 && ./build.sh` gives the same SHA-256 as the
+release's `.sha256` file.
 
 ## How it works
 
