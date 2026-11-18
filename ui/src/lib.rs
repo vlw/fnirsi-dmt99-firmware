@@ -3,6 +3,7 @@
 #![cfg_attr(not(test), no_std)]
 
 pub mod app;
+pub mod games;
 pub mod meter;
 pub mod font;
 pub mod font_data;

@@ -30,6 +30,8 @@ with a Material 3 interface, a PC simulator and a one-click Linux flasher.**
   change, and can replace its NCV and continuity sounds with the firmware's own, at your volume.
 - **Settings that stick**: brightness, auto power-off, sounds, remembered mode, °C/°F and
   language (English / Russian), stored in the meter's settings flash page.
+- **Games** in the menu: *Snake* and *Runner* (an endless runner across an oscilloscope
+  screen), each with easy / medium / hard levels, and the classic *15 Puzzle*.
 - **Pixel-identical simulator.** The UI crate is shared, so what you see on the PC is what
   the meter draws. A fake measurement chip speaks the real wire protocol.
 - **Safe to try.** The bootloader is never touched: the stock firmware can always be flashed back.
@@ -42,6 +44,8 @@ with a Material 3 interface, a PC simulator and a one-click Linux flasher.**
 | Resistance | AC current, mA | Non-contact voltage |
 | <img src="docs/screenshots/reset.png" width="260"> | <img src="docs/screenshots/about.png" width="260"> | <img src="docs/screenshots/ru.png" width="260"> |
 | Confirmation dialog | About | Russian UI, REL |
+| <img src="docs/screenshots/game-snake.png" width="260"> | <img src="docs/screenshots/game-runner.png" width="260"> | <img src="docs/screenshots/game-fifteen.png" width="260"> |
+| Snake | Runner | 15 Puzzle |
 
 ## Controls
 
@@ -55,6 +59,7 @@ with a Material 3 interface, a PC simulator and a one-click Linux flasher.**
 | **Power** | Power off (saves settings) | — |
 
 In the menu ▲/▼ move between rows, ◀/▶ change a value and OK toggles or opens it.
+In games the arrows react on press, OK is the action button and holding OK leaves the game.
 
 ## Settings
 
@@ -71,6 +76,7 @@ In the menu ▲/▼ move between rows, ◀/▶ change a value and OK toggles or 
 | Temperature | °C | °C / °F |
 | Language | Русский | Русский / English |
 | Reset settings | | With a confirmation dialog |
+| Games | | Snake and Runner (three difficulty levels), 15 Puzzle; best results per level are kept until power-off |
 | About | | Version, author, repository |
 
 ## Quick start (Linux)
@@ -197,7 +203,7 @@ python3 tools/gen_font.py > ui/src/font_data.rs
 ## Repository layout
 
 ```
-ui/                   shared no_std crate: app, screens, Material 3 widgets, text, protocol parser
+ui/                   shared no_std crate: app, screens, games, Material 3 widgets, text, protocol parser
 device/               firmware: startup, bare-register drivers (clock, LCD, keys, UART/DMA, flash…)
 sim/                  SDL2 simulator with a fake measurement chip
 tools/gen_font.py     font and icon rasterizer (generates ui/src/font_data.rs)

@@ -254,6 +254,12 @@ pub mod keys {
 
     static mut HELD: [u16; 6] = [0; 6]; // repeat keys, then dual keys, then power
     static mut POWER_ARMED: bool = false;
+    static mut INSTANT: bool = false;
+
+    /// Games: arrows fire on press (no long-press variants); OK keeps short/long so it can exit.
+    pub fn set_instant(on: bool) {
+        unsafe { *core::ptr::addr_of_mut!(INSTANT) = on };
+    }
 
     pub fn init() {
         for pin in [2, 8, 9, 10, 11, 12] {
@@ -280,8 +286,20 @@ pub mod keys {
                 held[i] = 0;
             }
         }
+        let instant = unsafe { *core::ptr::addr_of!(INSTANT) };
         for (i, &(pin, short, long)) in DUAL.iter().enumerate() {
             let h = &mut held[REPEAT.len() + i];
+            if instant && short != Key::Ok {
+                if low & (1 << pin) != 0 {
+                    *h = h.saturating_add(1);
+                    if *h == 2 {
+                        ev = Some(Event::Key(short));
+                    }
+                } else {
+                    *h = 0;
+                }
+                continue;
+            }
             if low & (1 << pin) != 0 {
                 *h = h.saturating_add(1);
                 if *h == LONG {
@@ -305,6 +323,34 @@ pub mod keys {
             *armed = true; // the key that switched the meter on has been released
         }
         ev
+    }
+}
+
+pub mod timer {
+    //! Wall clock in 10 ms ticks from TIM3 counting at 10 kHz (as the stock firmware sets it up).
+    //! The main loop's own counter cannot be used: a pass takes 10 ms plus however long drawing took.
+    use super::*;
+
+    const TIM3: u32 = 0x4000_0400;
+    static mut LAST: u16 = 0;
+    static mut TENTHS_MS: u32 = 0;
+
+    pub fn init() {
+        modify(RCC_APB1PCENR, 0, 1 << 1);
+        wr(TIM3 + 0x28, 14_399); // 144 MHz timer clock / 14400 = 10 kHz
+        wr(TIM3 + 0x2C, 0xFFFF);
+        wr(TIM3 + 0x14, 1); // UG: load the prescaler
+        wr(TIM3, 1); // CEN
+    }
+
+    /// Ticks of 10 ms since `init`. Call at least every 6.5 s (the counter wraps at 65536 / 10 kHz).
+    pub fn now() -> u32 {
+        // SAFETY: single-threaded.
+        let (last, acc) = unsafe { (&mut *core::ptr::addr_of_mut!(LAST), &mut *core::ptr::addr_of_mut!(TENTHS_MS)) };
+        let cnt = rd(TIM3 + 0x24) as u16;
+        *acc = acc.wrapping_add(cnt.wrapping_sub(*last) as u32);
+        *last = cnt;
+        *acc / 100
     }
 }
 

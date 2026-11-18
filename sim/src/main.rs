@@ -4,7 +4,7 @@
 //!   cargo run --release               window; arrows, Enter = OK, Backspace = long OK (menu/back),
 //!                                     Shift+Up/Left/Right = hold (REL, DC/AC),
 //!                                     +/- battery voltage, C charging, Q quit
-//!   cargo run -- --shot out.ppm ok,down,right   headless: press keys, save the final frame
+//!   cargo run -- --shot out.ppm ok,down,right   headless: press keys (waitN: N ticks), save the frame
 use std::ffi::{c_char, c_int, c_void};
 use ui::app::{App, Inputs, Key, Settings};
 use ui::meter::{Mode, Stream};
@@ -157,7 +157,16 @@ fn main() {
     if args.get(1).map(String::as_str) == Some("--shot") {
         let path = args.get(2).expect("--shot PATH [keys]");
         let keys = args.get(3).map(|s| s.split(',').filter(|s| !s.is_empty()).collect()).unwrap_or(Vec::<&str>::new());
+        let mut now: u32 = 1000; // game clock in 10 ms ticks
         for (t, k) in keys.into_iter().enumerate() {
+            if let Some(n) = k.strip_prefix("wait") {
+                // "wait150": let 1.5 s of game time pass
+                for _ in 0..n.parse::<u32>().expect("waitN") {
+                    now += 1;
+                    app.tick(now);
+                }
+                continue;
+            }
             match k {
                 "charge" => inp.charging = true,
                 "low" => inp.battery_mv = 3480,
@@ -175,6 +184,7 @@ fn main() {
                         "back" => Key::Back,
                         _ => panic!("unknown key {k}"),
                     };
+                    app.tick(now);
                     app.key(key);
                 }
             }
@@ -249,6 +259,7 @@ fn main() {
             if t % 30 == 0 {
                 dirty |= chip.tick(t, &mut app);
             }
+            dirty |= app.tick(t);
             let snd = app.sound(t);
             if snd != last_sound {
                 println!("buzzer: {snd:?}");

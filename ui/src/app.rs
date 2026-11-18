@@ -2,6 +2,7 @@
 //! measurement frames; what the hardware must do (send a chip command, save settings, apply
 //! backlight/volume) is read back from `App`.
 use crate::font_data::*;
+use crate::games::{self, Game};
 use crate::meter::{group_of, Frame, Mode, Reading, GROUP_DOWN, MODES};
 use crate::{rgb, Canvas, Txt, BATT, BODY, HUGE, SMALL, TITLE, W};
 use core::fmt::Write;
@@ -154,9 +155,14 @@ pub enum Sound {
 enum Screen {
     Measure,
     Menu,
+    /// list of games
+    Games,
+    /// difficulty for the selected game
+    Level,
+    Play,
 }
 
-const ITEMS: u8 = 12;
+const ITEMS: u8 = 13;
 const LABEL_X: i32 = 58;
 
 /// The control on the right of a menu row.
@@ -200,6 +206,15 @@ pub struct App {
     retries: u8,
     /// "О прошивке" dialog is open
     about: bool,
+    /// the running game, the selected row of the games list, best results this session
+    game: Option<Game>,
+    game_sel: u8,
+    /// difficulty row on the Level screen, and the last level picked per game
+    level_sel: u8,
+    levels: [u8; games::COUNT],
+    best: [[Option<u32>; games::LEVELS]; games::COUNT],
+    /// current time in 10 ms ticks, from `tick`
+    now: u32,
     /// reset confirmation dialog: Some(selected button), 0 = Отмена, 1 = Да
     confirm: Option<u8>,
     unacked_frames: u8,
@@ -240,6 +255,12 @@ impl App {
             awaiting: Some(mode as u8),
             retries: 0,
             about: false,
+            game: None,
+            game_sel: 0,
+            level_sel: 1,
+            levels: [1; games::COUNT],
+            best: [[None; games::LEVELS]; games::COUNT],
+            now: 0,
             confirm: None,
             unacked_frames: 0,
         }
@@ -254,6 +275,38 @@ impl App {
         self.command.take()
     }
 
+    /// Advance time to `t` (10 ms ticks); returns true if the screen must be redrawn.
+    pub fn tick(&mut self, t: u32) -> bool {
+        self.now = t;
+        let dirty = match (self.screen, &mut self.game) {
+            (Screen::Play, Some(g)) => g.tick(t),
+            _ => false,
+        };
+        self.collect_result();
+        dirty
+    }
+
+    /// A game is on screen: arrows should act on press, without long-press variants.
+    pub fn in_game(&self) -> bool {
+        self.screen == Screen::Play
+    }
+
+    fn collect_result(&mut self) {
+        if let Some(g) = &mut self.game {
+            let (i, l) = (g.index(), g.level());
+            if let Some(r) = g.take_result() {
+                let better = match self.best[i][l] {
+                    None => true,
+                    Some(b) if games::lower_is_better(i) => r < b,
+                    Some(b) => r > b,
+                };
+                if better && (r > 0 || games::lower_is_better(i)) {
+                    self.best[i][l] = Some(r);
+                }
+            }
+        }
+    }
+
     /// A mode command is out and the chip has not confirmed it yet.
     pub fn awaiting_ack(&self) -> bool {
         self.awaiting.is_some()
@@ -261,6 +314,9 @@ impl App {
 
     /// Buzzer state for own NCV / continuity sounds at time `t10` (10 ms ticks).
     pub fn sound(&self, t10: u32) -> Sound {
+        if let (Screen::Play, Some(g)) = (self.screen, &self.game) {
+            return g.sound(t10);
+        }
         let r = self.reading;
         match self.mode() {
             Mode::Ncv if self.s.own_ncv => {
@@ -352,7 +408,55 @@ impl App {
         match self.screen {
             Screen::Measure => self.measure_key(k),
             Screen::Menu => self.menu_key(k),
+            Screen::Games => self.games_key(k),
+            Screen::Level => self.level_key(k),
+            Screen::Play => {
+                if k == Key::Back {
+                    self.screen = Screen::Games;
+                    self.game = None;
+                    return true;
+                }
+                let now = self.now;
+                let dirty = self.game.as_mut().is_some_and(|g| g.key(k, now));
+                self.collect_result();
+                dirty
+            }
         }
+    }
+
+    fn games_key(&mut self, k: Key) -> bool {
+        let n = games::COUNT as u8;
+        match k {
+            Key::Up | Key::UpLong => self.game_sel = (self.game_sel + n - 1) % n,
+            Key::Down => self.game_sel = (self.game_sel + 1) % n,
+            Key::Ok if games::has_levels(self.game_sel as usize) => {
+                self.level_sel = self.levels[self.game_sel as usize];
+                self.screen = Screen::Level;
+            }
+            Key::Ok => self.start_game(0),
+            Key::Back => self.screen = Screen::Menu,
+            _ => return false,
+        }
+        true
+    }
+
+    fn level_key(&mut self, k: Key) -> bool {
+        let n = games::LEVELS as u8;
+        match k {
+            Key::Up | Key::UpLong | Key::Left | Key::LeftLong => self.level_sel = self.level_sel.saturating_sub(1),
+            Key::Down | Key::Right | Key::RightLong => self.level_sel = (self.level_sel + 1).min(n - 1),
+            Key::Ok => {
+                self.levels[self.game_sel as usize] = self.level_sel;
+                self.start_game(self.level_sel as usize);
+            }
+            Key::Back => self.screen = Screen::Games,
+        }
+        true
+    }
+
+    fn start_game(&mut self, level: usize) {
+        self.game = Some(Game::new(self.game_sel as usize, level, self.now));
+        self.screen = Screen::Play;
     }
 
     fn set_mode(&mut self, m: Mode) {
@@ -491,7 +595,11 @@ impl App {
                 8 => s.fahrenheit = !s.fahrenheit,
                 9 => s.english = !s.english,
                 10 if k == Key::Ok => self.confirm = Some(0), // ask first; "Отмена" preselected
-                11 if k == Key::Ok => self.about = true,
+                11 if k == Key::Ok => {
+                    self.screen = Screen::Games;
+                    self.game_sel = 0;
+                }
+                12 if k == Key::Ok => self.about = true,
                 _ => return false,
             },
         }
@@ -504,13 +612,23 @@ impl App {
     }
 
     pub fn draw(&self, c: &mut Canvas, inp: &Inputs) {
-        c.clear(BG);
         let en = self.s.english;
-        let title = if self.screen == Screen::Menu { tr(en, "Настройки", "Settings") } else { self.mode().name(en) };
+        if let (Screen::Play, Some(g)) = (self.screen, &self.game) {
+            return g.draw(c, en, self.best[g.index()][g.level()]);
+        }
+        c.clear(BG);
+        let title = match self.screen {
+            Screen::Menu => tr(en, "Настройки", "Settings"),
+            Screen::Games => tr(en, "Игры", "Games"),
+            Screen::Level => games::name(self.game_sel as usize, en),
+            _ => self.mode().name(en),
+        };
         c.text(&BODY, 16, 23, title, ON_SURFACE);
         self.status_icons(c, inp);
         match self.screen {
             Screen::Measure => self.measure(c),
+            Screen::Games | Screen::Play => self.games_list(c),
+            Screen::Level => self.level_list(c),
             Screen::Menu => {
                 self.menu(c);
                 if let Some(b) = self.confirm {
@@ -676,12 +794,58 @@ impl App {
             8 => (IC_THERMOSTAT, tr(en, "Температура", "Temperature"), text(if s.fahrenheit { "°F" } else { "°C" })),
             9 => (IC_LANGUAGE, tr(en, "Язык", "Language"), text(tr(en, "Русский", "English"))),
             10 => (IC_RESTART_ALT, tr(en, "Сброс настроек", "Reset settings"), text("OK")),
+            11 => (IC_SPORTS_ESPORTS, tr(en, "Игры", "Games"), text("›")),
             _ => {
                 let mut v = Txt::<16>::new();
                 let _ = write!(v, "v{VERSION}");
                 (IC_INFO, tr(en, "О прошивке", "About"), Control::Text(v))
             }
         }
+    }
+
+    /// A list row: icon, label and a value on the right.
+    fn row(&self, c: &mut Canvas, y: i32, sel: bool, icon: &str, label: &str, value: &str) {
+        let (bg, fg) = if sel { (PRIMARY_CONT, ON_PRIMARY_CONT) } else { (SURFACE, ON_SURFACE) };
+        c.round_rect(12, y, W - 24, 46, 16, bg);
+        if !icon.is_empty() {
+            c.text(&ICON, 26, y + 34, icon, if sel { ON_PRIMARY_CONT } else { ON_SURFACE_VAR });
+        }
+        c.text(&BODY, if icon.is_empty() { 30 } else { LABEL_X }, y + 30, label, fg);
+        c.text_right(&BODY, W - 28, y + 30, value, if sel { ON_PRIMARY_CONT } else { ON_SURFACE_VAR });
+    }
+
+    /// This session's best for game `i` on `level`, as text.
+    fn best_text(&self, i: usize, level: usize) -> Txt<16> {
+        let mut v = Txt::<16>::new();
+        let en = self.s.english;
+        let _ = match self.best[i][level] {
+            Some(b) if games::lower_is_better(i) => write!(v, "{b} {}", tr(en, "ход.", "moves")),
+            Some(b) => write!(v, "{b}"),
+            None => write!(v, "—"),
+        };
+        v
+    }
+
+    /// Games list: icon, name and the best result (on the last level played).
+    fn games_list(&self, c: &mut Canvas) {
+        let en = self.s.english;
+        for i in 0..games::COUNT {
+            let icon = [IC_CABLE, IC_DIRECTIONS_RUN, IC_GRID_VIEW][i];
+            let best = self.best_text(i, if games::has_levels(i) { self.levels[i] as usize } else { 0 });
+            self.row(c, 36 + i as i32 * 50, self.game_sel as usize == i, icon, games::name(i, en), best.as_str());
+        }
+        c.text_centered(&SMALL, W / 2, 222, tr(en, "OK: играть   удерживать OK: назад", "OK: play   hold OK: back"), ON_SURFACE_VAR);
+    }
+
+    /// Difficulty choice with the best result on each level.
+    fn level_list(&self, c: &mut Canvas) {
+        let en = self.s.english;
+        let g = self.game_sel as usize;
+        for l in 0..games::LEVELS {
+            let best = self.best_text(g, l);
+            self.row(c, 36 + l as i32 * 50, self.level_sel as usize == l, "", games::level_name(l, en), best.as_str());
+        }
+        c.text_centered(&SMALL, W / 2, 222, tr(en, "OK: начать   удерживать OK: назад", "OK: start   hold OK: back"), ON_SURFACE_VAR);
     }
 
     fn menu(&self, c: &mut Canvas) {
@@ -918,6 +1082,33 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn games_flow() {
+        let mut a = App::new(Settings::default());
+        a.key(Key::Back); // menu
+        for _ in 0..11 {
+            a.key(Key::Down); // "Игры", the second to last row
+        }
+        a.key(Key::Ok);
+        a.key(Key::Ok); // Snake: asks for the difficulty, medium preselected
+        assert!(!a.in_game());
+        a.key(Key::Down); // hard
+        a.key(Key::Ok);
+        assert!(a.in_game());
+        assert_eq!(a.game.as_ref().map(|g| g.level()), Some(2));
+        a.key(Key::Back); // leave the game
+        a.key(Key::Ok);
+        assert_eq!(a.level_sel, 2); // the last level is remembered
+        a.key(Key::Back); // back to the list
+        a.key(Key::Down);
+        a.key(Key::Down); // 15 puzzle: no levels, starts at once
+        a.key(Key::Ok);
+        assert!(a.in_game());
+        a.key(Key::Back);
+        a.key(Key::Back);
+        assert!(a.in_menu());
     }
 
     #[test]

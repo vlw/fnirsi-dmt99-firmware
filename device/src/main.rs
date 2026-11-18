@@ -142,6 +142,7 @@ extern "C" fn main() -> ! {
     lcd::init();
     battery::init();
     meter_uart::init();
+    timer::init();
     if !settings.quiet_switch {
         buzzer::off(); // PA1 floats after reset: hold the buzzer driver low
     }
@@ -163,13 +164,15 @@ extern "C" fn main() -> ! {
         delay_ms(10);
         tick = tick.wrapping_add(1);
         idle = idle.saturating_add(1);
-        let mut dirty = false;
+        let now = timer::now();
+        let mut dirty = app.tick(now);
+        keys::set_instant(app.in_game());
         match keys::poll() {
             Some(keys::Event::Power) => shutdown(&app),
             Some(keys::Event::Key(k)) => {
                 idle = 0;
                 let before = app.s.brightness;
-                dirty = app.key(k);
+                dirty |= app.key(k);
                 if app.s.brightness != before {
                     apply_backlight(&app.s);
                 }
@@ -200,7 +203,7 @@ extern "C" fn main() -> ! {
                 tail -= 1;
             }
         }
-        let own = app.sound(tick);
+        let own = app.sound(now);
         let want = if tail > 0 && !matches!(own, Sound::Tone { .. }) { Sound::Mask } else { own };
         apply_sound(&mut sound, want, app.s.beep_duty());
         if tick % 200 == 0 {

@@ -15,7 +15,7 @@ SYMBOLS = os.path.join(HERE, "fonts", "MaterialSymbolsRounded.ttf")
 NOTO = "/usr/share/fonts/truetype/noto/NotoSans-{}.ttf"
 WIDE_GLYPHS = {"Ω"}
 
-TEXT = "".join(map(chr, range(32, 127))) + "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя°Ωµ–—…⚡◀▶~"
+TEXT = "".join(map(chr, range(32, 127))) + "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя°Ωµ–—…⚡◀▶▲▼~›·"
 BIG = " 0123456789.-OL"
 
 # Material Symbols code points used by the UI (names from fonts.google.com/icons)
@@ -36,6 +36,9 @@ ICONS = {
     0xEFE6: "cable",
     0xE889: "history",
     0xE894: "language",
+    0xEA28: "sports_esports",
+    0xE9B0: "grid_view",
+    0xE566: "directions_run",
 }
 ICON_CHARS = "".join(map(chr, ICONS))
 

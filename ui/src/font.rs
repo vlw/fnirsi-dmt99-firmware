@@ -105,6 +105,39 @@ mod tests {
         assert_eq!(f.width("tttttttt"), (w + 8) >> 4);
     }
 
+    /// Every character in the UI's string literals must exist in the text fonts (a missing glyph
+    /// is skipped silently when drawing, which is easy to miss on screen).
+    #[test]
+    fn every_ui_string_has_its_glyphs() {
+        let sources = [include_str!("app.rs"), include_str!("games.rs"), include_str!("meter.rs")];
+        for src in sources {
+            let mut chars = src.chars().peekable();
+            let mut in_str = false;
+            while let Some(ch) = chars.next() {
+                match (in_str, ch) {
+                    (false, '/') if chars.peek() == Some(&'/') => {
+                        for c in chars.by_ref() {
+                            if c == '\n' {
+                                break; // skip a // comment: quotes there are not UI text
+                            }
+                        }
+                    }
+                    (false, '"') => in_str = true,
+                    (true, '"') => in_str = false,
+                    (true, '\\') => {
+                        chars.next(); // an escape such as \u{...} or \n, not drawn as typed
+                    }
+                    (true, ch) if !ch.is_control() => {
+                        for f in [&crate::SMALL, &crate::BODY, &crate::TITLE] {
+                            assert!(f.glyph(ch).is_some(), "glyph {ch:?} missing");
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
     #[test]
     fn subpixel_phase_follows_the_pen() {
         let f = &crate::BODY;
