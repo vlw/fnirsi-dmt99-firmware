@@ -1,0 +1,6 @@
+# The exact Rust release used for builds, so local builds and GitHub releases are byte-identical.
+# rustup installs it (with the RISC-V target) on the first ./build.sh.
+[toolchain]
+channel = "1.93.1"
+targets = ["riscv32imac-unknown-none-elf"]
+profile = "minimal"

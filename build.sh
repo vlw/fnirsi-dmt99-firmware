@@ -7,18 +7,14 @@
 # Flash it with ./flash-dmt99.sh (or copy it to the meter's BOOT disk on Windows).
 set -e
 cd "$(dirname "$0")"
-TARGET=riscv32imac-unknown-none-elf
+TARGET=riscv32imac-unknown-none-elf # the Rust version and target are pinned in rust-toolchain.toml
 OUT=DMT99-custom.BIN
 
 fail() { echo "error: $1" >&2; exit 1; }
 
 # --- prerequisites ---------------------------------------------------------
-command -v cargo >/dev/null || fail "Rust is not installed. Get it from https://rustup.rs"
+command -v rustup >/dev/null || fail "rustup is not installed. Get it from https://rustup.rs"
 command -v python3 >/dev/null || fail "python3 is not installed (sudo apt install python3)"
-if command -v rustup >/dev/null; then
-    rustup target list --installed | grep -qx "$TARGET" ||
-        fail "the RISC-V target is missing. Install it with: rustup target add $TARGET"
-fi
 OBJCOPY=
 for c in llvm-objcopy llvm-objcopy-20 llvm-objcopy-19 llvm-objcopy-18 llvm-objcopy-17 llvm-objcopy-16 llvm-objcopy-15 rust-objcopy; do
     command -v "$c" >/dev/null && { OBJCOPY=$c; break; }
@@ -26,6 +22,9 @@ done
 [ -n "$OBJCOPY" ] || fail "llvm-objcopy not found. Install LLVM: sudo apt install llvm"
 
 # --- build -----------------------------------------------------------------
+echo "[0/3] Rust toolchain from rust-toolchain.toml (installed on first use)"
+rustup toolchain install
+
 echo "[1/3] Compiling (cargo build --release --target $TARGET)"
 (cd device && cargo build --release)
 

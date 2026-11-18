@@ -98,11 +98,12 @@ On Debian / Ubuntu:
 
 ```bash
 sudo apt install llvm python3 libsdl2-dev
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh    # skip if Rust is installed
-rustup target add riscv32imac-unknown-none-elf
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh    # skip if rustup is installed
 ```
 
-`llvm` provides `llvm-objcopy`, `libsdl2-dev` is only needed for the simulator.
+`llvm` provides `llvm-objcopy`, `libsdl2-dev` is only needed for the simulator. The exact Rust
+version and the RISC-V target are pinned in `rust-toolchain.toml`; `./build.sh` installs them
+on first use, so local builds are byte-identical to the GitHub releases.
 
 ### 2. Build
 

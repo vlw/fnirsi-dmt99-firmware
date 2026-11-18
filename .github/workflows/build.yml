@@ -19,7 +19,7 @@ jobs:
 
       - name: Install tools
         run: |
-          rustup target add riscv32imac-unknown-none-elf
+          rustup toolchain install # the version and target pinned in rust-toolchain.toml
           sudo apt-get update -qq
           sudo apt-get install -y -qq llvm libsdl2-dev
 
