@@ -74,6 +74,8 @@ pub struct Settings {
     pub own_ncv: bool,
     /// mute the chip in continuity mode and play our own tone (adds the frame latency, ~170 ms)
     pub own_continuity: bool,
+    /// the bar under the reading that shows how much of the range is used
+    pub range_bar: bool,
 }
 
 pub const AUTO_OFF_MIN: [u32; 4] = [0, 5, 15, 30];
@@ -94,6 +96,7 @@ impl Default for Settings {
             remember_mode: true,
             own_ncv: false,
             own_continuity: false,
+            range_bar: true,
         }
     }
 }
@@ -106,7 +109,8 @@ impl Settings {
             | (self.quiet_switch as u8) << 3
             | (self.remember_mode as u8) << 4
             | (self.own_ncv as u8) << 5
-            | (self.own_continuity as u8) << 6;
+            | (self.own_continuity as u8) << 6
+            | (!self.range_bar as u8) << 7; // inverted: settings saved before this bit existed keep the bar
         [FORMAT, self.brightness, self.auto_off, self.volume, self.mode, flags, 0, 0]
     }
     pub fn from_bytes(b: &[u8; 8]) -> Option<Self> {
@@ -123,13 +127,13 @@ impl Settings {
             remember_mode: f(4),
             own_ncv: f(5),
             own_continuity: f(6),
+            range_bar: !f(7),
         };
         let ok = b[0] == FORMAT
             && (1..=5).contains(&s.brightness)
             && (s.auto_off as usize) < AUTO_OFF_MIN.len()
             && (1..=4).contains(&s.volume)
-            && (s.mode as usize) < MODES.len()
-            && b[5] < 0x80;
+            && (s.mode as usize) < MODES.len();
         ok.then_some(s)
     }
     pub fn auto_off_minutes(&self) -> u32 {
@@ -163,7 +167,7 @@ enum Screen {
     Play,
 }
 
-const ITEMS: u8 = 13;
+const ITEMS: u8 = 14;
 const LABEL_X: i32 = 58;
 
 /// The control on the right of a menu row.
@@ -398,6 +402,11 @@ impl App {
                 if self.hold || self.reading == Some(r) {
                     return false;
                 }
+                // the chip blanks its digits while it changes range: keep the last value on screen
+                // (NCV is exempt: there a blank display means "no field")
+                if r.is_blank() && self.reading.is_some() && self.mode() != Mode::Ncv {
+                    return false;
+                }
                 self.reading = Some(r);
                 self.screen == Screen::Measure
             }
@@ -593,14 +602,15 @@ impl App {
                 5 => s.own_continuity = !s.own_continuity,
                 6 => s.remember_mode = !s.remember_mode,
                 7 if k != Key::Ok => s.volume = step(s.volume, 1, 4, k),
-                8 => s.fahrenheit = !s.fahrenheit,
-                9 => s.english = !s.english,
-                10 if k == Key::Ok => self.confirm = Some(0), // ask first; "Отмена" preselected
-                11 if k == Key::Ok => {
+                8 => s.range_bar = !s.range_bar,
+                9 => s.fahrenheit = !s.fahrenheit,
+                10 => s.english = !s.english,
+                11 if k == Key::Ok => self.confirm = Some(0), // ask first; "Отмена" preselected
+                12 if k == Key::Ok => {
                     self.screen = Screen::Games;
                     self.game_sel = 0;
                 }
-                12 if k == Key::Ok => self.about = true,
+                13 if k == Key::Ok => self.about = true,
                 _ => return false,
             },
         }
@@ -752,7 +762,7 @@ impl App {
                 let s = core::str::from_utf8(&b[..n]).unwrap_or("").trim();
                 if s == "AUTO" {
                     big_word(c, s, CARD_CY - 12, ON_SURFACE);
-                    c.text_centered(&BODY, W / 2, CARD_CY + 36, tr(self.s.english, "Подключите щупы", "Connect the probes"), ON_SURFACE_VAR);
+                    c.text_centered(&BODY, W / 2, CARD_CY + 36, tr(self.s.english, "Приложите щупы к цепи", "Touch the probes to a circuit"), ON_SURFACE_VAR);
                 } else {
                     big_word(c, s, CARD_CY, ON_SURFACE);
                 }
@@ -763,16 +773,14 @@ impl App {
         // so the number stays put when the sign or the value changes.
         let mw = HUGE.width("-");
         let x = (W - mw - HUGE.width(t.as_str())) / 2;
+        let y = digits_y(self.s.range_bar);
         if neg {
-            c.text(&HUGE, x, DIGITS_Y, "-", ON_SURFACE);
+            c.text(&HUGE, x, y, "-", ON_SURFACE);
         }
-        c.text(&HUGE, x + mw, DIGITS_Y, t.as_str(), ON_SURFACE);
+        c.text(&HUGE, x + mw, y, t.as_str(), ON_SURFACE);
         c.text_right(&TITLE, W - 32, 72, unit, PRIMARY);
-        if let Some((fill, full)) = r.range() {
-            // over range is a warning for voltage and current; for Ω and continuity "OL" just means open probes
-            // (continuity reports in volts too, so it is excluded by mode, not by unit)
-            let alarm = r.is_overload() && (6..=10).contains(&r.unit) && self.mode() != Mode::Diode;
-            range_bar(c, fill, full, r.unit_str(), r.is_overload(), alarm);
+        if let Some((fill, full)) = r.range().filter(|_| self.s.range_bar) {
+            range_bar(c, fill, full, r.unit_str());
         }
     }
 
@@ -799,10 +807,11 @@ impl App {
             5 => (IC_CABLE, tr(en, "Своя прозвонка", "Own continuity"), Control::Switch(s.own_continuity)),
             6 => (IC_HISTORY, tr(en, "Помнить режим", "Remember mode"), Control::Switch(s.remember_mode)),
             7 => (IC_VOLUME_UP, tr(en, "Громкость", "Volume"), Control::Slider(s.volume, 4)),
-            8 => (IC_THERMOSTAT, tr(en, "Температура", "Temperature"), text(if s.fahrenheit { "°F" } else { "°C" })),
-            9 => (IC_LANGUAGE, tr(en, "Язык", "Language"), text(tr(en, "Русский", "English"))),
-            10 => (IC_RESTART_ALT, tr(en, "Сброс настроек", "Reset settings"), text("OK")),
-            11 => (IC_SPORTS_ESPORTS, tr(en, "Игры", "Games"), text("›")),
+            8 => (IC_LINEAR_SCALE, tr(en, "Полоса диапазона", "Range bar"), Control::Switch(s.range_bar)),
+            9 => (IC_THERMOSTAT, tr(en, "Температура", "Temperature"), text(if s.fahrenheit { "°F" } else { "°C" })),
+            10 => (IC_LANGUAGE, tr(en, "Язык", "Language"), text(tr(en, "Русский", "English"))),
+            11 => (IC_RESTART_ALT, tr(en, "Сброс настроек", "Reset settings"), text("OK")),
+            12 => (IC_SPORTS_ESPORTS, tr(en, "Игры", "Games"), text("›")),
             _ => {
                 let mut v = Txt::<16>::new();
                 let _ = write!(v, "v{VERSION}");
@@ -955,8 +964,18 @@ fn mode_label(c: &mut Canvas, m: Mode, cx: i32, cy: i32, col: u16, fahrenheit: b
     }
 }
 
-/// Baseline of the big reading inside the measurement card.
-const DIGITS_Y: i32 = 158;
+/// Bottom of the chips row and the unit, the top of the space for the big reading.
+const CHIPS_BOTTOM: i32 = 77;
+/// Bottom of the space for the big reading when there is no range bar.
+const CARD_CONTENT_BOTTOM: i32 = 174;
+
+/// Baseline of the big reading: digit ink centred between the unit above and the range labels
+/// (or the card's bottom) below, so the air above and below it is the same.
+fn digits_y(range_bar: bool) -> i32 {
+    let bottom = if range_bar { RANGE_LABEL_Y + SMALL.ink("0").map_or(-10, |(_, _, t, _)| t) } else { CARD_CONTENT_BOTTOM };
+    let (_, _, t, b) = HUGE.ink("0").unwrap_or((0, 0, -64, 0));
+    (CHIPS_BOTTOM + bottom - t - b) / 2
+}
 /// Vertical centre of the measurement card's content area (below the chips row).
 const CARD_CY: i32 = 118;
 
@@ -966,33 +985,25 @@ fn big_word(c: &mut Canvas, s: &str, cy: i32, col: u16) {
     c.text_mid(f, W / 2, cy, s, col);
 }
 
-/// Range bar geometry: the labels sit in fixed cells, so the bar has the same length in every mode.
-const RANGE_Y: i32 = 168;
-const RANGE_LEFT_W: i32 = 16;
-const RANGE_RIGHT_W: i32 = 72;
+/// Range bar: spans the card with the same inset on both sides as the chips and the unit,
+/// "0" and the full scale are written above its ends.
+const RANGE_X: i32 = 28;
+const RANGE_Y: i32 = 172;
+const RANGE_LABEL_Y: i32 = 166;
 
 /// Material 3 linear indicator under the reading: how much of the chip's current range is used
-/// (`fill` of 10000), between "0" and the range's full scale.
-fn range_bar(c: &mut Canvas, fill: u32, full: u32, unit: &str, overload: bool, alarm: bool) {
-    let cy = RANGE_Y + 2;
-    let x0 = 28 + RANGE_LEFT_W + 8;
-    let x1 = W - 28 - RANGE_RIGHT_W - 8;
-    let w = x1 - x0;
-    c.text_right(&SMALL, x0 - 8, cy + SMALL.ink("0").map_or(5, |(_, _, t, b)| -(t + b) / 2), "0", ON_SURFACE_VAR);
-    c.round_rect(x0, RANGE_Y, w, 4, 2, SURFACE_HI);
+/// (`fill` of 10000), from "0" to the range's full scale.
+fn range_bar(c: &mut Canvas, fill: u32, full: u32, unit: &str) {
+    let w = W - 2 * RANGE_X;
+    c.round_rect(RANGE_X, RANGE_Y, w, 4, 2, SURFACE_HI);
     let fw = (w as u32 * fill / 10_000) as i32;
-    let col = match (overload, alarm) {
-        (true, true) => RED,
-        (true, false) => ON_SURFACE_VAR,
-        _ => PRIMARY,
-    };
     if fw > 0 {
-        c.round_rect(x0, RANGE_Y, fw.max(4), 4, 2, col);
+        c.round_rect(RANGE_X, RANGE_Y, fw.max(4), 4, 2, PRIMARY);
     }
     let mut label = Txt::<16>::new();
     let _ = write!(label, "{full} {unit}");
-    // digits share one baseline with the "0": centre on the digit height, not on letters like "k"
-    c.text(&SMALL, x1 + 8, cy + SMALL.ink("0").map_or(5, |(_, _, t, b)| -(t + b) / 2), label.as_str(), ON_SURFACE_VAR);
+    c.text(&SMALL, RANGE_X - SMALL.ink("0").map_or(0, |(l, ..)| l), RANGE_LABEL_Y, "0", ON_SURFACE_VAR);
+    c.text_right(&SMALL, W - RANGE_X, RANGE_LABEL_Y, label.as_str(), ON_SURFACE_VAR);
 }
 
 /// Status bar geometry: everything is centred on one line, with equal outer margins and gaps.
@@ -1094,6 +1105,18 @@ mod tests {
     }
 
     #[test]
+    fn keeps_last_value_while_chip_changes_range() {
+        use crate::meter::Reading;
+        let mut a = App::new(Settings { mode: 1, ..Settings::default() });
+        a.on_frame(Frame::Event(a.mode() as u8));
+        let v = Reading { symbols: [0, 9, 9, 7], decimal_after: 1, unit: 6, ..Reading::default() };
+        assert!(a.on_frame(Frame::Display(v)));
+        let blank = Reading { symbols: [17; 4], ..Reading::default() };
+        assert!(!a.on_frame(Frame::Display(blank)));
+        assert_eq!(a.reading, Some(v));
+    }
+
+    #[test]
     fn own_sounds() {
         use crate::meter::Reading;
         let mut a = App::new(Settings { own_ncv: true, own_continuity: true, ..Settings::default() });
@@ -1117,7 +1140,7 @@ mod tests {
     fn reset_needs_confirmation() {
         let mut a = App::new(Settings { brightness: 1, ..Settings::default() });
         a.key(Key::Back); // menu
-        for _ in 0..10 {
+        for _ in 0..11 {
             a.key(Key::Down); // "Сброс настроек"
         }
         a.key(Key::Ok);
@@ -1152,7 +1175,7 @@ mod tests {
     fn games_flow() {
         let mut a = App::new(Settings::default());
         a.key(Key::Back); // menu
-        for _ in 0..11 {
+        for _ in 0..12 {
             a.key(Key::Down); // "Игры", the second to last row
         }
         a.key(Key::Ok);
@@ -1176,18 +1199,22 @@ mod tests {
     }
 
     #[test]
-    fn range_labels_fit_their_cell() {
-        let units = ["V", "mV", "µA", "mA", "A", "Ω", "kΩ", "MΩ", "nF", "µF", "mF", "Hz", "kHz", "MHz"];
-        for u in units {
-            for full in [10, 100, 1000, 10000] {
-                if u == "MHz" && full > 10 {
-                    continue; // the meter measures frequency up to 10 MHz
-                }
-                let t = std::format!("{full} {u}");
-                assert!(SMALL.width(&t) <= RANGE_RIGHT_W, "{t}: {}", SMALL.width(&t));
-            }
-        }
-        assert!(SMALL.width("0") <= RANGE_LEFT_W);
+    fn range_bar_is_symmetric_and_hidden_over_range() {
+        // the widest full-scale label and the "0" fit above the bar with room between them
+        let w = |t: &str| SMALL.ink(t).map_or(0, |(l, r, ..)| r - l);
+        assert!(w("0") + 24 + w("10000 kHz") <= W - 2 * RANGE_X);
+        // the bar stays above the card's rounded bottom (card ends at 184, corner radius 28)
+        assert!(RANGE_Y + 4 <= 184 - 8);
+        // the reading has as much air above (to the unit) as below (to the range labels)
+        let (_, _, t, b) = HUGE.ink("0").unwrap();
+        let label_top = RANGE_LABEL_Y + SMALL.ink("0").unwrap().2;
+        let y = digits_y(true);
+        assert!(((y + t - CHIPS_BOTTOM) - (label_top - (y + b))).abs() <= 1);
+        assert!(y + b + 6 <= label_top, "the reading crowds the range labels");
+        // no bar over range
+        let ol = Reading { symbols: [17, 0, 14, 17], decimal_after: 2, unit: 13, ..Reading::default() };
+        assert!(ol.is_overload());
+        assert_eq!(ol.range(), None);
     }
 
     /// Draw `s` with `text_mid` at the centre of a small canvas and return its ink box centre.
@@ -1234,10 +1261,13 @@ mod tests {
 
     #[test]
     fn settings_roundtrip() {
-        let s = Settings { brightness: 2, auto_off: 3, english: true, volume: 1, fahrenheit: true, mode: 5, own_ncv: true, ..Settings::default() };
+        let s = Settings { brightness: 2, auto_off: 3, english: true, volume: 1, fahrenheit: true, mode: 5, own_ncv: true, range_bar: false, ..Settings::default() };
         assert_eq!(Settings::from_bytes(&s.to_bytes()), Some(s));
         assert_eq!(Settings::from_bytes(&[0xFF; 8]), None); // erased flash
         assert_eq!(Settings::from_bytes(&[4, 2, 1, 1, 3, 0, 0, 1]), None); // v0.3 layout: reset to defaults
+        // settings saved by v1.2.0 (bit 7 unused) keep the range bar on
+        assert_eq!(Settings::from_bytes(&Settings::default().to_bytes()).map(|s| s.range_bar), Some(true));
+        assert_eq!(Settings::default().to_bytes()[5] & 0x80, 0);
     }
 
     #[test]

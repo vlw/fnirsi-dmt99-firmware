@@ -7,7 +7,7 @@ with a Material 3 interface, a PC simulator and a one-click Linux flasher.**
 
 ![Rust](https://img.shields.io/badge/Rust-no__std-orange?logo=rust)
 ![RISC-V](https://img.shields.io/badge/RISC--V-CH32V303-blue)
-![Version](https://img.shields.io/badge/version-1.2.0-green)
+![Version](https://img.shields.io/badge/version-1.3.0-green)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
 <img src="docs/screenshots/dcv.png" width="320" alt="DC voltage">&nbsp;<img src="docs/screenshots/menu.png" width="320" alt="Settings">
@@ -28,6 +28,8 @@ with a Material 3 interface, a PC simulator and a one-click Linux flasher.**
 - **Stock-like controls.** Same buttons, same mode groups, plus long presses for DC/AC and REL.
 - **Quiet.** Optionally mutes the measurement chip's beep on power-on and on every mode
   change, and can replace its NCV and continuity sounds with the firmware's own, at your volume.
+- **Range bar.** A thin bar under the reading shows how much of the current range is used,
+  from 0 to the range's full scale. While the meter changes range the last value stays on screen.
 - **Settings that stick**: brightness, auto power-off, sounds, remembered mode, °C/°F and
   language (English / Russian), stored in the meter's settings flash page.
 - **Games** in the menu: *Snake* and *Runner* (an endless runner across an oscilloscope
@@ -41,7 +43,7 @@ with a Material 3 interface, a PC simulator and a one-click Linux flasher.**
 | Measurement | | |
 |:-:|:-:|:-:|
 | <img src="docs/screenshots/ohm.png" width="260"> | <img src="docs/screenshots/amp.png" width="260"> | <img src="docs/screenshots/ncv.png" width="260"> |
-| Resistance | AC current, mA | Non-contact voltage |
+| Resistance | AC current, over range | Non-contact voltage |
 | <img src="docs/screenshots/reset.png" width="260"> | <img src="docs/screenshots/about.png" width="260"> | <img src="docs/screenshots/ru.png" width="260"> |
 | Confirmation dialog | About | Russian UI, REL |
 | <img src="docs/screenshots/game-snake.png" width="260"> | <img src="docs/screenshots/game-runner.png" width="260"> | <img src="docs/screenshots/game-fifteen.png" width="260"> |
@@ -73,6 +75,7 @@ In games the arrows react on press, OK is the action button and holding OK leave
 | Own continuity | off | Firmware tone on short circuit (adds ~170 ms latency) |
 | Remember mode | on | Start in the last mode instead of AUTO |
 | Volume | 3 / 4 | For the firmware's own sounds |
+| Range bar | on | Bar under the reading: how much of the current range is used |
 | Temperature | °C | °C / °F |
 | Language | Русский | Русский / English |
 | Reset settings | | With a confirmation dialog |
@@ -185,7 +188,7 @@ The [build workflow](.github/workflows/build.yml) tests and builds every push. T
 version, bump `version` in `ui/Cargo.toml` (the firmware shows it in *About*), commit, then:
 
 ```bash
-git tag v1.2.0 && git push origin v1.2.0
+git tag v1.3.0 && git push origin v1.3.0
 ```
 
 The workflow checks that the tag matches the version, signs a build provenance attestation
@@ -195,11 +198,11 @@ The workflow checks that the tag matches the version, signs a build provenance a
 workflow from the tagged commit:
 
 ```bash
-gh attestation verify DMT99-custom-v1.2.0.BIN -R vlw/fnirsi-dmt99-firmware
+gh attestation verify DMT99-custom-v1.3.0.BIN -R vlw/fnirsi-dmt99-firmware
 ```
 
 The build is also reproducible (the Rust version is pinned), so you can check it without
-trusting GitHub at all: `git checkout v1.2.0 && ./build.sh` gives the same SHA-256 as the
+trusting GitHub at all: `git checkout v1.3.0 && ./build.sh` gives the same SHA-256 as the
 release's `.sha256` file.
 
 ## How it works

@@ -41,6 +41,7 @@ ICONS = {
     0xEA28: "sports_esports",
     0xE9B0: "grid_view",
     0xE566: "directions_run",
+    0xE260: "linear_scale",  # range bar
 }
 ICON_CHARS = "".join(map(chr, ICONS))
 
